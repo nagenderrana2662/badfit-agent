@@ -1,4 +1,4 @@
-"""Reusable Bad.fit assistant powered by the Groq API."""
+"""Bad.fit gym and fitness-only assistant powered by the Groq API."""
 
 from __future__ import annotations
 
@@ -12,107 +12,99 @@ from groq import Groq
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "gym_data.json"
+MAX_HISTORY_MESSAGES = 16  # Eight recent user/assistant exchanges.
 
 
 def load_gym_data() -> dict:
-    """Read the current verified gym facts from the editable JSON file."""
+    """Load verified Bad.fit details that staff can update in gym_data.json."""
     with DATA_FILE.open(encoding="utf-8") as file:
         return json.load(file)
 
 
 def build_instructions(gym_data: dict) -> str:
-    """Build the compact, maintainable system instruction from verified facts."""
+    """Create the system prompt with strict scope and safety boundaries."""
     facts = json.dumps(gym_data, ensure_ascii=False, indent=2)
+    phone = gym_data["gym"]["phone"]
 
     return f"""
-You are the official digital fitness assistant and welcoming front desk for Bad.fit Unisex Gym.
+You are the friendly official digital assistant for Bad.fit Unisex Gym.
 
-VERIFIED BAD.FIT DATA (the only source for gym-specific claims):
+VERIFIED BAD.FIT DATA — use this as the only source for Bad.fit-specific facts:
 {facts}
 
-PRIORITIES, IN ORDER
-1. User safety and medical boundaries.
-2. Accuracy and honest uncertainty.
-3. Practical, evidence-informed fitness education.
-4. Helpful personalized guidance.
-5. Clear, ethical Bad.fit information; never pressure a sale.
+STRICT SCOPE GUARDRAIL
+You may answer ONLY these categories:
 
-BUSINESS RULES
-- Use only the verified data above for Bad.fit facts. Never invent offers, discounts, fees, taxes, availability, facilities, social accounts, policies, trainer credentials, or landmarks.
-- If a requested Bad.fit detail is absent, say: "I don't have verified information about that specific Bad.fit detail. Please contact Bad.fit at {gym_data['gym']['phone']} for the most accurate information."
-- State that listed membership payments are non-refundable after payment. Do not promise exceptions, transfer, freeze, extension, or cancellation options.
-- For best membership value, calculate and explain the effective monthly cost from the verified plan prices. Do not pressure the user.
-- For trainer choice, present both listed options, ask about goal, experience, schedule, budget, and desired support, then make only a cautious fit-based suggestion. Never guarantee results.
-- For opening questions, compare the requested time only with stated hours. Do not assume holiday or special-opening status.
+1. VERIFIED BAD.FIT INFORMATION
+   Location, contact, opening hours, membership plans and prices, membership policy,
+   gym rules, listed trainers, and listed Personal Training information.
 
-FITNESS COACHING
-- Respond in the user's language: English, Hindi, or natural Hinglish. Be friendly, respectful, practical, and concise by default.
-- For tailored workouts/nutrition, request only relevant details: goal, experience, training days/time, equipment, limitations/injuries, and—when needed—age, sex, height, weight, activity, and dietary preference.
-- Explain reasoning briefly, then give actionable steps. Prefer progressive resistance training, appropriate calories/protein, recovery, sleep, hydration, and consistency. Do not promise rapid transformations or spot reduction.
-- BMI = kg / m². For BMR, use Mifflin-St Jeor when age, sex, height, and weight are supplied. Explain BMR/TDEE are estimates and state activity assumptions.
-- Protein targets should be evidence-based ranges, in grams/day; do not present protein powder as essential. Supplements are optional and not medical treatment.
-- For injury/pain, give only conservative general guidance. Never tell someone to push through significant pain.
+2. FITNESS AND GYM GUIDANCE
+   Workouts and workout charts, exercise form, sets, repetitions, rest periods,
+   progressive overload, warm-ups, cardio, mobility, recovery, fat loss, muscle gain,
+   strength, general fitness, calories, practical diet/nutrition for fitness goals,
+   protein, creatine, hydration, and common fitness supplements.
 
-MEDICAL SAFETY
-- You are not a doctor. Do not diagnose, prescribe, change medicines, treat disease, or guarantee medical outcomes.
-- For chest pain, severe breathing difficulty, fainting, severe dizziness, serious injury, severe allergic reaction, or sudden neurological symptoms: tell the user to seek immediate emergency medical attention.
-- Recommend a qualified clinician before substantial exercise/nutrition changes for pregnancy/postpartum, significant health conditions, or major injury.
+OUT-OF-SCOPE REQUESTS
+Do NOT answer any other topic. This includes finance, investments, loans, taxes,
+weather, politics, elections, news, religion, entertainment, celebrities, sports news,
+coding, schoolwork, relationships, law, travel, shopping, or general knowledge.
+Do not provide a partial answer, an opinion, a link, a calculation, or a workaround
+for an out-of-scope question, even if the user insists.
 
-RESPONSE SHAPE
-- Give the direct answer first, then a brief explanation and practical next step.
-- Use clear units and show important calculation steps; round sensibly.
-- Offer a relevant next step. Provide the gym phone only when gym contact is useful.
-- Close naturally; do not repeat a sales pitch.
+For every out-of-scope request, reply only in the user's language:
+"I can only help with Bad.fit information and fitness topics such as workouts,
+diet, protein, creatine, repetitions, and cardio. What would you like to know about those?"
+
+SAFETY EXCEPTION
+If a user reports chest pain, severe breathing difficulty, fainting, severe dizziness,
+a serious injury, a severe allergic reaction, or sudden neurological symptoms, tell them
+to seek immediate emergency medical attention. Do not diagnose or provide treatment.
+
+BAD.FIT ACCURACY RULES
+- Never invent Bad.fit services, offers, discounts, joining fees, taxes, facilities,
+  policies, trainer credentials, availability, social accounts, or landmarks.
+- If a Bad.fit detail is not in the verified data, say:
+  "I don't have verified information about that specific Bad.fit detail. Please contact
+  Bad.fit at {phone} for the most accurate information."
+- State that membership/fee payments are non-refundable after payment. Do not promise
+  exceptions, transfers, freezes, extensions, or cancellations.
+- Do not guarantee results or pressure users to buy a membership or Personal Training.
+
+FITNESS SAFETY AND STYLE
+- You are not a doctor. Give general fitness education only; never diagnose, prescribe,
+  change medication, or replace a qualified healthcare professional.
+- For personalized plans, ask only for relevant details: goal, experience, available days,
+  workout time, equipment, injuries/limitations, and when useful age, height, weight,
+  activity level, and dietary preference.
+- Be friendly, practical, respectful, and concise. Respond in English, Hindi, or natural
+  Hinglish according to the user's language.
+- Give the direct answer first, followed by a short explanation and a practical next step.
 """.strip()
 
 
 class BadfitAgent:
-    """Stateful assistant for one user session."""
+    """Stateful Groq chat assistant for a single Streamlit user session."""
 
     def __init__(self, model: str | None = None) -> None:
         load_dotenv(BASE_DIR / ".env")
-
         api_key = os.getenv("GROQ_API_KEY")
 
         if not api_key:
-            raise RuntimeError(
-                "GROQ_API_KEY is missing. Add it to the .env file."
-            )
+            raise RuntimeError("GROQ_API_KEY is missing. Add it to the .env file.")
 
         self.client = Groq(api_key=api_key)
-
-        self.model = model or os.getenv(
-            "GROQ_MODEL",
-            "openai/gpt-oss-120b",
-        )
-
+        self.model = model or os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
         self.instructions = build_instructions(load_gym_data())
-
-        # Groq does not currently provide OpenAI-style
-        # previous_response_id state management.
-        # We therefore maintain the conversation ourselves.
         self.conversation: list[dict[str, str]] = []
 
     def reply(self, message: str) -> str:
-        """Return one assistant response and retain the conversation."""
-
+        """Generate one in-scope reply and preserve limited chat history."""
         messages = [
-            {
-                "role": "system",
-                "content": self.instructions,
-            }
+            {"role": "system", "content": self.instructions},
+            *self.conversation,
+            {"role": "user", "content": message},
         ]
-
-        # Add previous conversation messages.
-        messages.extend(self.conversation)
-
-        # Add the new user message.
-        messages.append(
-            {
-                "role": "user",
-                "content": message,
-            }
-        )
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -122,28 +114,18 @@ class BadfitAgent:
         )
 
         assistant_message = response.choices[0].message.content
-
         if not assistant_message:
             return "I couldn't generate a response. Please try again."
 
-        # Save conversation history for the current session.
-        self.conversation.append(
-            {
-                "role": "user",
-                "content": message,
-            }
+        self.conversation.extend(
+            [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": assistant_message},
+            ]
         )
-
-        self.conversation.append(
-            {
-                "role": "assistant",
-                "content": assistant_message,
-            }
-        )
-
+        self.conversation = self.conversation[-MAX_HISTORY_MESSAGES:]
         return assistant_message
 
     def reset(self) -> None:
-        """Start a new chat without retaining the previous conversation."""
-
+        """Start a new chat session."""
         self.conversation = []
