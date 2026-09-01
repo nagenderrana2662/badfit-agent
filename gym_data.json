@@ -1,0 +1,47 @@
+{
+  "gym": {
+    "name": "Bad.fit Unisex Gym",
+    "address": "Main 40 Feet Road, C 291, Sai Kunj, New Palam Vihar 3, Gurgaon, Haryana - 122017",
+    "phone": "9015170007",
+    "tagline": "Train Smart. Stay Consistent. Get Stronger."
+  },
+  "hours": {
+    "morning": "5:30 AM - 12:00 PM",
+    "evening": "4:30 PM - 10:00 PM"
+  },
+  "membership_plans_inr": {
+    "Monthly": 1200,
+    "Quarterly": 3000,
+    "Half-Yearly": 5000,
+    "Yearly": 9000
+  },
+  "membership_policy": {
+    "refunds": "Membership/fee payments are non-refundable after payment."
+  },
+  "rules": [
+    "Do not throw or unnecessarily drop weights.",
+    "Re-rack dumbbells, plates, rods/bars, ropes, and other equipment after use.",
+    "Switch off treadmills, cardio machines, and other electrical equipment after use."
+  ],
+  "trainers": [
+    {
+      "name": "Nagender Rana",
+      "role": "Founder / Trainer",
+      "experience_years": 10,
+      "qualifications": [
+        "EREPS Level 4 Certified Trainer",
+        "Skill India Certified",
+        "Classic Fitness Academy Certified",
+        "IGNOU DNHE Certified / Diploma"
+      ],
+      "personal_training_inr_per_month": 10000
+    },
+    {
+      "name": "Shivam Paswan",
+      "role": "Trainer",
+      "experience_years": 3,
+      "description": "Described by Bad.fit as well-trained in Personal Training.",
+      "personal_training_inr_per_month": 7000
+    }
+  ]
+}
