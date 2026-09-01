@@ -1,4 +1,4 @@
-"""Reusable Bad.fit assistant powered by the OpenAI Responses API."""
+"""Reusable Bad.fit assistant powered by the Groq API."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from groq import Groq
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,6 +23,7 @@ def load_gym_data() -> dict:
 def build_instructions(gym_data: dict) -> str:
     """Build the compact, maintainable system instruction from verified facts."""
     facts = json.dumps(gym_data, ensure_ascii=False, indent=2)
+
     return f"""
 You are the official digital fitness assistant and welcoming front desk for Bad.fit Unisex Gym.
 
@@ -70,27 +71,79 @@ class BadfitAgent:
 
     def __init__(self, model: str | None = None) -> None:
         load_dotenv(BASE_DIR / ".env")
-        if not os.getenv("OPENAI_API_KEY"):
-            raise RuntimeError("OPENAI_API_KEY is missing. Add it to a .env file.")
-        self.client = OpenAI()
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-5")
+
+        api_key = os.getenv("GROQ_API_KEY")
+
+        if not api_key:
+            raise RuntimeError(
+                "GROQ_API_KEY is missing. Add it to the .env file."
+            )
+
+        self.client = Groq(api_key=api_key)
+
+        self.model = model or os.getenv(
+            "GROQ_MODEL",
+            "llama-3.3-70b-versatile",
+        )
+
         self.instructions = build_instructions(load_gym_data())
-        self.previous_response_id: str | None = None
+
+        # Groq does not currently provide OpenAI-style
+        # previous_response_id state management.
+        # We therefore maintain the conversation ourselves.
+        self.conversation: list[dict[str, str]] = []
 
     def reply(self, message: str) -> str:
-        """Return one assistant response and retain the current conversation."""
-        request = {
-            "model": self.model,
-            "instructions": self.instructions,
-            "input": message,
-        }
-        if self.previous_response_id:
-            request["previous_response_id"] = self.previous_response_id
+        """Return one assistant response and retain the conversation."""
 
-        response = self.client.responses.create(**request)
-        self.previous_response_id = response.id
-        return response.output_text or "I couldn't generate a response. Please try again."
+        messages = [
+            {
+                "role": "system",
+                "content": self.instructions,
+            }
+        ]
+
+        # Add previous conversation messages.
+        messages.extend(self.conversation)
+
+        # Add the new user message.
+        messages.append(
+            {
+                "role": "user",
+                "content": message,
+            }
+        )
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0.3,
+            max_completion_tokens=1024,
+        )
+
+        assistant_message = response.choices[0].message.content
+
+        if not assistant_message:
+            return "I couldn't generate a response. Please try again."
+
+        # Save conversation history for the current session.
+        self.conversation.append(
+            {
+                "role": "user",
+                "content": message,
+            }
+        )
+
+        self.conversation.append(
+            {
+                "role": "assistant",
+                "content": assistant_message,
+            }
+        )
+
+        return assistant_message
 
     def reset(self) -> None:
-        """Start a new chat without retaining the previous response chain."""
-        self.previous_response_id = None
+        """Start a new chat without retaining the previous conversation."""
+
+        self.conversation = []
